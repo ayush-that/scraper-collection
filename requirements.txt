@@ -1,0 +1,5 @@
+selenium>=4.1.0
+requests>=2.28.0
+crawl4ai>=1.0.0
+asyncio>=3.4.3
+aiohttp>=3.8.0
