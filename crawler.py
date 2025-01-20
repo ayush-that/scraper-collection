@@ -16,14 +16,30 @@ class PDFCollector:
         self.visited: Set[str] = set()
         self.pdf_links: Set[str] = set()
         self.session_id = "pdf_collection_session"
+        self.cleanup_js = """
+            
+        """
 
     async def collect_pdfs(self):
         browser_config = BrowserConfig(
             headless=True,
             accept_downloads=False,
-            extra_args=["--disable-gpu", "--disable-dev-shm-usage", "--no-sandbox"],
+            light_mode=True,
+            extra_args=[
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--no-sandbox",
+                "--disable-extensions",
+                "--disable-notifications",
+                "--disable-popup-blocking",
+            ],
         )
-        crawl_config = CrawlerRunConfig(cache_mode=CacheMode.BYPASS)
+        crawl_config = CrawlerRunConfig(
+            cache_mode=CacheMode.BYPASS,
+            wait_for_images=False,
+            delay_before_return_html=0.1,
+            js_code=self.cleanup_js,  # Execute cleanup JavaScript before crawling
+        )
 
         async with AsyncWebCrawler(config=browser_config) as crawler:
             await self._crawl_parallel(
@@ -43,25 +59,27 @@ class PDFCollector:
         urls: List[str],
         current_depth: int,
         crawl_config: CrawlerRunConfig,
-        max_concurrent: int = 1,
+        max_concurrent: int = 3,
     ):
         if current_depth > self.max_depth:
             return
 
-        semaphore = asyncio.Semaphore(max_concurrent)
+        batch_size = 10
+        for i in range(0, len(urls), batch_size):
+            batch_urls = urls[i : i + batch_size]
+            semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def sem_task(url):
-            async with semaphore:
-                if url not in self.visited:
-                    self.visited.add(url)
-                    print(f"Crawling: {url} (Depth: {current_depth})")
-                    session_id = f"{self.session_id}_{current_depth}"
-                    await self._crawl_single(
-                        crawler, url, current_depth, crawl_config, session_id
-                    )
+            async def sem_task(url):
+                async with semaphore:
+                    if url not in self.visited:
+                        self.visited.add(url)
+                        print(f"Crawling: {url} (Depth: {current_depth})")
+                        await self._crawl_single(
+                            crawler, url, current_depth, crawl_config, self.session_id
+                        )
 
-        tasks = [sem_task(url) for url in urls]
-        await asyncio.gather(*tasks)
+            tasks = [sem_task(url) for url in batch_urls]
+            await asyncio.gather(*tasks)
 
     async def _crawl_single(
         self,
@@ -76,13 +94,36 @@ class PDFCollector:
                 url=url, config=crawl_config, session_id=session_id
             )
             if result.success:
-                links = result.links.get("internal", []) + result.links.get(
+                all_links = result.links.get("internal", []) + result.links.get(
                     "external", []
                 )
-                for link in links:
+                next_urls = []
+
+                for link in all_links:
                     href = link.get("href")
                     if not href:
                         continue
+
+                    # Skip common navigation patterns in URLs
+                    if any(
+                        pattern in href.lower()
+                        for pattern in [
+                            "menu",
+                            "nav",
+                            "header",
+                            "footer",
+                            "about",
+                            "contact",
+                            "privacy",
+                            "terms",
+                            "sitemap",
+                            "search",
+                            "login",
+                            "register",
+                        ]
+                    ):
+                        continue
+
                     full_url = urljoin(self.base_url, href)
                     parsed_url = urlparse(full_url)
 
@@ -93,9 +134,12 @@ class PDFCollector:
                         self.pdf_links.add(full_url)
                         print(f"Found PDF: {full_url}")
                     elif full_url not in self.visited:
-                        await self._crawl_parallel(
-                            crawler, [full_url], current_depth + 1, crawl_config
-                        )
+                        next_urls.append(full_url)
+
+                if next_urls:
+                    await self._crawl_parallel(
+                        crawler, next_urls, current_depth + 1, crawl_config
+                    )
             else:
                 print(f"Failed to crawl {url}: {result.error_message}")
         except Exception as e:

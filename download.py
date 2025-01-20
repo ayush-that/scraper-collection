@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 with open("pdf_links.json", "r") as file:
     pdf_links = json.load(file)
@@ -20,5 +21,17 @@ def download_pdf(url, directory):
         print(f"Failed to download {url}: {e}")
 
 
-for link in pdf_links:
-    download_pdf(link, "downloaded_pdfs")
+def download_pdfs_concurrently(links, directory, max_workers=10):
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_url = {
+            executor.submit(download_pdf, link, directory): link for link in links
+        }
+        for future in as_completed(future_to_url):
+            url = future_to_url[future]
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error downloading {url}: {e}")
+
+
+download_pdfs_concurrently(pdf_links, "downloaded_pdfs", max_workers=10)
