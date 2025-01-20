@@ -12,8 +12,8 @@ source .venv/bin/activate
 ### Installing the dependencies
 
 ```bash
-pip install "crawl4ai @ git+https://github.com/unclecode/crawl4ai.git" transformers torch nltk
-pip install -r requirements.txt
+uv pip install "crawl4ai @ git+https://github.com/unclecode/crawl4ai.git" transformers torch nltk
+uv pip install -r requirements.txt
 
 # Installing Playwright
 playwright install
@@ -22,12 +22,6 @@ playwright install
 ### Running the crawler
 
 ```bash
-python search.py
-python crawler.py
-```
-
-### Removing duplicates (Not required)
-
-```bash
-python duplicate.py
+uv python search.py
+uv python crawler.py
 ```

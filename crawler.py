@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import Set, List
 from urllib.parse import urljoin, urlparse
-from crawl4ai import AsyncWebCrawler
+from crawl4ai import AsyncWebCrawler, CacheMode
 from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
 
 
@@ -23,7 +23,7 @@ class PDFCollector:
             accept_downloads=False,
             extra_args=["--disable-gpu", "--disable-dev-shm-usage", "--no-sandbox"],
         )
-        crawl_config = CrawlerRunConfig()
+        crawl_config = CrawlerRunConfig(cache_mode=CacheMode.BYPASS)
 
         async with AsyncWebCrawler(config=browser_config) as crawler:
             await self._crawl_parallel(
@@ -103,7 +103,7 @@ class PDFCollector:
 
 
 async def main():
-    with open("link.txt", "r") as file:
+    with open("links.txt", "r") as file:
         base_url = file.readline().strip()
 
     collector = PDFCollector(
